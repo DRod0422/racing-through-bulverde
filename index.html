@@ -29,7 +29,8 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:16px/1
 #pad .u{grid-column:2;grid-row:1}#pad .l{grid-column:1;grid-row:2}#pad .r{grid-column:3;grid-row:2}#pad .d{grid-column:2;grid-row:3}
 #pad.hidden{display:none}
 canvas{display:block;border-radius:10px;box-shadow:0 10px 40px rgba(0,0,0,.5)}
-.overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 20%,#24324a 0%,#14151b 70%);text-align:center;padding:24px 18px;gap:12px;overflow-y:auto;touch-action:pan-y}
+.overlay{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;background:radial-gradient(circle at 50% 20%,#24324a 0%,#14151b 70%);text-align:center;padding:24px 18px;gap:12px;overflow-y:auto;touch-action:pan-y}
+.overlay>:first-child{margin-top:auto}.overlay>:last-child{margin-bottom:auto}
 .overlay.dim{background:rgba(14,15,20,.88)}
 .hidden{display:none!important}
 h1,h2{font-family:Bungee,system-ui;margin:0;line-height:1.05;text-wrap:balance}
@@ -56,6 +57,10 @@ button:focus-visible,input:focus-visible{outline:3px solid #fff;outline-offset:2
 #nameRow{display:flex;gap:8px}
 input{font:inherit;font-size:16px;padding:10px 14px;border-radius:12px;border:2px solid #3a3d4c;background:#11131a;color:var(--ink);width:150px}
 .row{display:flex;gap:10px;flex-wrap:wrap;justify-content:center}
+.seg{display:flex;background:#1c2030;border-radius:999px;padding:4px;gap:4px}
+.seg button{background:transparent;color:var(--ink);font-size:15px;padding:8px 16px;min-height:40px}
+.seg button.on{background:var(--sign);color:#1a1a1a}
+#diffNote{font-size:13px;color:var(--muted);margin:-4px 0 0;min-height:18px}
 .tiny{font-size:13px;color:var(--muted);margin:0}
 @media (prefers-reduced-motion:reduce){*{animation:none!important}}
 </style>
@@ -65,7 +70,7 @@ input{font:inherit;font-size:16px;padding:10px 14px;border-radius:12px;border:2p
   <div id="hud">
     <div class="l"><span class="lab">Score</span><span id="score">0</span></div>
     <div id="lvl">Bulverde Rd</div>
-    <div class="r"><span class="lab">Best <span id="best">0</span></span><span id="lives"></span><button id="pause" aria-label="Pause">⏸</button></div>
+    <div class="r"><span class="lab"><span id="diffLab">Pro</span> best <span id="best">0</span></span><span id="lives"></span><button id="pause" aria-label="Pause">⏸</button></div>
   </div>
   <div id="stage"><canvas id="game" aria-label="Game board"></canvas>
     <div id="pad"><button class="u" data-d="0,-1" aria-label="Up">▲</button><button class="l" data-d="-1,0" aria-label="Left">◀</button><button class="r" data-d="1,0" aria-label="Right">▶</button><button class="d" data-d="0,1" aria-label="Down">▼</button></div></div>
@@ -75,6 +80,8 @@ input{font:inherit;font-size:16px;padding:10px 14px;border-radius:12px;border:2p
   <span class="sign">Hill Country Arcade</span>
   <h1>Racing Through<br>Bulverde</h1>
   <p class="sub">Swipe or tap the arrows to steer. Grab every road light. Hit a ⚡ pad for a speed burst. Eat a 🥐 kolache and the critters run scared.</p>
+  <div id="diffs" class="seg" role="group" aria-label="Difficulty"></div>
+  <p id="diffNote"></p>
   <div id="skinName"></div>
   <div id="skins" class="skins"></div>
   <button id="playBtn">Let's Ride</button>
@@ -133,6 +140,10 @@ const MAP_SRC = [
 "#.................#",
 "###################"];
 const BOOST_PADS = [[4,3],[14,3],[9,19],[4,13],[14,13]];
+const DIFFS = {
+  rookie:{n:"Rookie",note:"Slower critters, longer kolache time, 5 lives",spd:0.72,fr:1.6,lives:5,rel:1.6},
+  pro:{n:"Pro",note:"Arcade speed, 3 lives",spd:1,fr:1,lives:3,rel:1},
+  legend:{n:"Legend",note:"Fast critters, short kolache time. Bragging rights.",spd:1.15,fr:0.6,lives:3,rel:0.7}};
 const COLS=19, ROWS=21, BONUS_SPOT=[9,11], PAD_H=172;
 const EMOJI='"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 
@@ -140,8 +151,14 @@ const $=id=>document.getElementById(id);
 const store={get(k,d){try{const v=localStorage.getItem(k);return v==null?d:JSON.parse(v)}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
 const esc=s=>String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
-let best=store.get("rtb_best",0), board=store.get("rtb_board",[]), skinIdx=store.get("rtb_skin",0), muted=store.get("rtb_mute",false);
-if(!SKINS[skinIdx]||best<SKINS[skinIdx].u) skinIdx=0;
+if(store.get("rtb_best_pro",null)==null){store.set("rtb_best_pro",store.get("rtb_best",0));store.set("rtb_board_pro",store.get("rtb_board",[]));}
+let diff=store.get("rtb_diff","pro");if(!DIFFS[diff])diff="pro";
+let best=0, board=[], skinIdx=store.get("rtb_skin",0), muted=store.get("rtb_mute",false), prevBestAll=0;
+const D=()=>DIFFS[diff];
+function loadDiff(){best=store.get("rtb_best_"+diff,0);board=store.get("rtb_board_"+diff,[]);}
+const bestAll=()=>Math.max(0,...Object.keys(DIFFS).map(k=>k===diff?best:store.get("rtb_best_"+k,0)));
+loadDiff();
+if(!SKINS[skinIdx]||bestAll()<SKINS[skinIdx].u) skinIdx=0;
 
 const cv=$("game"), ctx=cv.getContext("2d");
 let ts=20, dpr=1, wallLayer=document.createElement("canvas");
@@ -199,7 +216,7 @@ const isPad=(x,y)=>BOOST_PADS.some(p=>p[0]===x&&p[1]===y);
 function resetEntities(){
   player={x:playerStart[0],y:playerStart[1],dx:0,dy:0,t:0,speed:6,face:-1};
   want=[0,0];
-  const starts=[[9,7],[8,9],[9,9],[10,9]], gap=Math.max(1,3-0.3*(level-1));
+  const starts=[[9,7],[8,9],[9,9],[10,9]], gap=Math.max(1,3-0.3*(level-1))*D().rel;
   ptime=0;
   ghosts=CHASERS.map((c,i)=>({...c,x:starts[i][0],y:starts[i][1],dx:0,dy:0,t:0,speed:5,inHouse:i>0,eaten:false,fright:false,release:i*gap}));
   frightT=0;boostT=0;modeT=0;mode="scatter";bonus=null;combo=0;
@@ -255,19 +272,19 @@ function ghostArrive(g){
   g.dx=pick[0];g.dy=pick[1];
 }
 function powerUp(){
-  frightT=Math.max(2.5,7-0.6*(level-1));combo=0;sfx.power();
+  frightT=Math.max(2.5,7-0.6*(level-1))*D().fr;combo=0;sfx.power();
   for(const g of ghosts){if(g.eaten)continue;g.fright=true;if((g.dx||g.dy)&&!g.inHouse)reverse(g);}
 }
 function bonusCheck(){
   if(dotsEaten===60||dotsEaten===140){const b=BONUS[Math.min(level-1,BONUS.length-1)];bonus={...b,t:9};}
 }
-function addScore(n){score+=n;if(score>best){best=score;store.set("rtb_best",best);}}
+function addScore(n){score+=n;if(score>best){best=score;store.set("rtb_best_"+diff,best);}}
 function popup(x,y,txt,col="#ffd23f"){popups.push({x,y,txt,col,t:1.2});}
 
 // ====== game flow ======
 function setState(s){state=s;stateT=0;}
 function startGame(){
-  score=0;lives=3;level=1;prevBest=best;saved=false;
+  score=0;lives=D().lives;level=1;prevBest=best;prevBestAll=bestAll();saved=false;
   loadMap();resetEntities();setState("ready");
   $("title").classList.add("hidden");$("over").classList.add("hidden");$("paused").classList.add("hidden");
 }
@@ -276,7 +293,7 @@ function gameOver(){
   setState("over");
   $("finalScore").textContent=score.toLocaleString();
   $("overTitle").textContent=score>=prevBest&&score>0?"New Best!":"Game Over";
-  const unlocked=SKINS.filter(s=>s.u>prevBest&&s.u<=best);
+  const unlocked=SKINS.filter(s=>s.u>prevBestAll&&s.u<=bestAll());
   $("unlockMsg").textContent=unlocked.length?"Unlocked: "+unlocked.map(s=>s.e+" "+s.n).join(", "):"";
   const qualifies=score>0&&(board.length<5||score>board[board.length-1].s);
   $("nameRow").classList.toggle("hidden",!qualifies);
@@ -300,7 +317,7 @@ function update(dt){
   step(player,dt,playerArrive);
   for(const g of ghosts){
     const tunnel=g.y===9&&(g.x<4||g.x>14);
-    g.speed=g.eaten?11:g.fright?3.2:tunnel?2.8:Math.min(7.2,5+0.35*(level-1));
+    g.speed=g.eaten?11:g.fright?3.2*Math.min(1,D().spd):(tunnel?2.8:Math.min(7.2,5+0.35*(level-1)))*D().spd;
     step(g,dt,ghostArrive);
   }
   const[px,py]=pos(player);
@@ -407,9 +424,9 @@ function draw(){
 let hudCache="";
 function hud(){
   const lvl=LEVEL_NAMES[(level-1)%LEVEL_NAMES.length]+(level>LEVEL_NAMES.length?" +"+Math.floor((level-1)/LEVEL_NAMES.length):"");
-  const key=score+"|"+best+"|"+lives+"|"+lvl+"|"+skinIdx;
+  const key=score+"|"+best+"|"+lives+"|"+lvl+"|"+skinIdx+"|"+diff;
   if(key===hudCache)return;hudCache=key;
-  $("score").textContent=score.toLocaleString();$("best").textContent=best.toLocaleString();
+  $("diffLab").textContent=D().n;$("score").textContent=score.toLocaleString();$("best").textContent=best.toLocaleString();
   $("lvl").textContent="Lvl "+level+" · "+lvl;
   $("lives").textContent=SKINS[skinIdx].e.repeat(Math.max(0,lives-1));
 }
@@ -417,21 +434,26 @@ function hud(){
 // ====== menus ======
 function renderSkins(){
   $("skins").innerHTML=SKINS.map((s,i)=>{
-    const locked=best<s.u;
+    const locked=bestAll()<s.u;
     return `<button class="skin${i===skinIdx?" sel":""}${locked?" locked":""}" data-i="${i}" aria-label="${esc(s.n)}">${s.e}<small>${locked?"🔒 "+s.u.toLocaleString():esc(s.n.split(" ")[0])}</small></button>`;
   }).join("");
   $("skinName").textContent="Your ride: "+SKINS[skinIdx].n;
 }
 function renderBoard(id){
-  $(id).innerHTML=`<h3>Top Drivers</h3>`+(board.length?`<ol>${board.map(r=>`<li><span>${esc(r.n)}</span><span>${Number(r.s).toLocaleString()}</span></li>`).join("")}</ol>`:`<p class="tiny">No scores yet. Be the first.</p>`);
+  $(id).innerHTML=`<h3>Top Drivers · ${esc(D().n)}</h3>`+(board.length?`<ol>${board.map(r=>`<li><span>${esc(r.n)}</span><span>${Number(r.s).toLocaleString()}</span></li>`).join("")}</ol>`:`<p class="tiny">No scores yet. Be the first.</p>`);
 }
-function showTitle(){setState("title");renderSkins();renderBoard("boardT");$("over").classList.add("hidden");$("paused").classList.add("hidden");$("title").classList.remove("hidden");}
+function renderDiffs(){
+  $("diffs").innerHTML=Object.entries(DIFFS).map(([k,d])=>`<button data-k="${k}" class="${k===diff?"on":""}" aria-pressed="${k===diff}">${esc(d.n)}</button>`).join("");
+  $("diffNote").textContent=D().note;
+}
+function showTitle(){setState("title");renderDiffs();renderSkins();renderBoard("boardT");$("over").classList.add("hidden");$("paused").classList.add("hidden");$("title").classList.remove("hidden");}
 function setMuteLabel(){$("muteBtn").textContent=muted?"🔇 Sound off":"🔊 Sound on";}
 let pausedFrom=null;
 function pause(){if(state==="play"||state==="ready"){pausedFrom=state;setState("paused");$("paused").classList.remove("hidden");}}
 function resume(){if(state==="paused"){state=pausedFrom;$("paused").classList.add("hidden");}}
 
-$("skins").addEventListener("click",e=>{const b=e.target.closest(".skin");if(!b)return;const i=+b.dataset.i;if(best>=SKINS[i].u){skinIdx=i;store.set("rtb_skin",i);renderSkins();beep(660,0.08,"square",0.04);}else beep(160,0.15,"square",0.04);});
+$("skins").addEventListener("click",e=>{const b=e.target.closest(".skin");if(!b)return;const i=+b.dataset.i;if(bestAll()>=SKINS[i].u){skinIdx=i;store.set("rtb_skin",i);renderSkins();beep(660,0.08,"square",0.04);}else beep(160,0.15,"square",0.04);});
+$("diffs").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;diff=b.dataset.k;store.set("rtb_diff",diff);loadDiff();hudCache="";renderDiffs();renderBoard("boardT");beep(560,0.06,"square",0.04);});
 $("playBtn").addEventListener("click",()=>{beep(440,0.05,"square",0.001);startGame();});
 $("againBtn").addEventListener("click",startGame);
 $("garageBtn").addEventListener("click",showTitle);
@@ -442,7 +464,7 @@ $("quitBtn").addEventListener("click",showTitle);
 $("nameRow").addEventListener("submit",e=>{
   e.preventDefault();if(saved)return;
   const n=($("nameIn").value.trim()||"Driver").slice(0,8);store.set("rtb_name",n);
-  board.push({n,s:score});board.sort((a,b)=>b.s-a.s);board=board.slice(0,5);store.set("rtb_board",board);
+  board.push({n,s:score});board.sort((a,b)=>b.s-a.s);board=board.slice(0,5);store.set("rtb_board_"+diff,board);
   saved=true;$("nameRow").classList.add("hidden");renderBoard("boardO");
 });
 document.addEventListener("visibilitychange",()=>{if(document.hidden)pause();});

@@ -6,6 +6,8 @@ A Pac-Man-style arcade game set on the roads of Bulverde, TX. One HTML file, no 
 
 ## How to play
 
+- **Difficulty:** Rookie (slower critters, longer kolache time, 5 lives), Pro (arcade speed), or Legend (fast critters, short kolache time). Each has its own high score and Top 5 board.
+
 - **Steer:** swipe, tap the on-screen arrows, or use the arrow keys / WASD. `P` pauses.
 - **Road lights:** grab them all to clear the street.
 - **🥐 Kolache:** the critters turn blue and run. Catch them back to back for 200 → 400 → 800 → 1,600.
@@ -26,6 +28,7 @@ Everything kid-editable is at the top of the `<script>` in `index.html`:
 | `SKINS` | Playable rides and the score that unlocks each |
 | `CHASERS` | The critters chasing you, and their AI style (`chase`, `ahead`, `wander`, `shy`) |
 | `MAP_SRC` | The maze. `#` wall, `.` road light, `o` kolache, `P` start, `G` barn. Keep every row 19 characters wide. |
+| `DIFFS` | Speed, kolache time, lives, and release timing for each difficulty |
 | `BOOST_PADS` | `[x, y]` tiles that give a speed boost |
 
 Commit to `main` and GitHub Pages updates in about a minute.
