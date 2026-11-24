@@ -22,8 +22,8 @@ html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:16px/1
 .lab{display:block;font-size:11px;color:var(--muted);font-weight:600}
 #lives{font-size:16px;letter-spacing:1px}
 #pause{background:#2a2c38;color:var(--ink);font-size:15px;padding:0 12px;min-height:36px;border-radius:10px;margin-left:8px;vertical-align:middle}
-#stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:14px;width:100%}
-#pad{display:grid;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(3,56px);gap:6px}
+#stage{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:12px;width:100%}
+#pad{display:grid;grid-template-columns:repeat(3,66px);grid-template-rows:repeat(3,48px);gap:6px;flex:none}
 #pad button{padding:0;border-radius:16px;background:#2a2c38;color:var(--sign);font-size:24px;min-height:0}
 #pad button:active{background:#3a3e52}
 #pad .u{grid-column:2;grid-row:1}#pad .l{grid-column:1;grid-row:2}#pad .r{grid-column:3;grid-row:2}#pad .d{grid-column:2;grid-row:3}
@@ -133,7 +133,7 @@ const MAP_SRC = [
 "#.................#",
 "###################"];
 const BOOST_PADS = [[4,3],[14,3],[9,19],[4,13],[14,13]];
-const COLS=19, ROWS=21, BONUS_SPOT=[9,11];
+const COLS=19, ROWS=21, BONUS_SPOT=[9,11], PAD_H=172;
 const EMOJI='"Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
 
 const $=id=>document.getElementById(id);
@@ -324,8 +324,9 @@ function update(dt){
 function resize(){
   const hud=$("hud").getBoundingClientRect().height;
   const availW=Math.min(window.innerWidth-12,640);let availH=window.innerHeight-hud-16;
-  const fitW=Math.floor(availW/COLS)*ROWS, showPad=availH-fitW>200;
-  $("pad").classList.toggle("hidden",!showPad);if(showPad)availH-=200;
+  const touch=window.matchMedia("(pointer:coarse)").matches||"ontouchstart" in window;
+  const fitW=Math.floor(availW/COLS)*ROWS, showPad=touch||availH-fitW>PAD_H;
+  $("pad").classList.toggle("hidden",!showPad);if(showPad)availH-=PAD_H;
   ts=Math.max(10,Math.floor(Math.min(availW/COLS,availH/ROWS)));
   dpr=Math.min(3,window.devicePixelRatio||1);
   cv.width=COLS*ts*dpr;cv.height=ROWS*ts*dpr;
